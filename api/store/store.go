@@ -27,6 +27,7 @@ func NewStore() *Store {
 	}
 }
 
+// Added TTL support in Set and Get methods
 func (s *Store) Get(key string) (Value, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
