@@ -4,6 +4,9 @@ import (
 	"sync"
 	"time"
 	"strings"
+	"log"
+	"runtime/debug"
+	"context"
 )
 
 type Store struct {
@@ -94,4 +97,39 @@ func (s *Store) Exists(key string) (bool, error) {
 	defer s.mu.RUnlock()
 	_, exists := s.data[key]
 	return exists, nil
+}
+
+func goSafe(name string, fn func()) {
+    go func() {
+        defer func() {
+            if r := recover(); r != nil {
+                log.Printf("panic in %s: %v\n%s", name, r, debug.Stack())
+            }
+        }()
+        fn()
+    }()
+}
+
+func (s *Store) StartCollector(ctx context.Context) {
+	goSafe("ttl-expired-collector", func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.collectExpiredKeys()
+		}
+	})
+}
+
+func (s *Store) collectExpiredKeys() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	for key, value := range s.data {
+		if !value.expiresAt.IsZero() && now.After(value.expiresAt) {
+			delete(s.data, key)
+		}
+	}
 }

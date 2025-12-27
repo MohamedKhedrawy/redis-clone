@@ -11,6 +11,7 @@ import (
 	// "github.com/MohamedKhedrawy/redis-clone/api/client"
 	"github.com/MohamedKhedrawy/redis-clone/api/parser"
 	"github.com/MohamedKhedrawy/redis-clone/api/store"
+	"context"
 )
 
 // var mut sync.RWMutex
@@ -18,6 +19,7 @@ const MaxMessageSize = 1048576 // 1 MB
 
 func main() {
 	kvStore := store.NewStore()
+	kvStore.StartCollector(context.Background())
 	ln, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		fmt.Println("Error starting TCP listener:", err)
@@ -113,3 +115,4 @@ func handleConnection(conn net.Conn, kvStore *store.Store) {
 		}
 	}
 }
+
