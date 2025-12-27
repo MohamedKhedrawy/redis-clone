@@ -12,10 +12,15 @@ import (
 	"github.com/MohamedKhedrawy/redis-clone/api/parser"
 	"github.com/MohamedKhedrawy/redis-clone/api/store"
 	"context"
+	"time"
 )
 
 // var mut sync.RWMutex
 const MaxMessageSize = 1048576 // 1 MB
+const (
+    readTimeout  = 2 * time.Minute
+    writeTimeout = 10 * time.Second
+)
 
 func main() {
 	kvStore := store.NewStore()
@@ -53,6 +58,11 @@ func handleConnection(conn net.Conn, kvStore *store.Store) {
 
 	for {
 		// Handle the connection (read/write data) here
+
+		// Set read deadline
+		conn.SetReadDeadline(time.Now().Add(readTimeout))
+		
+		// Read the length prefix (4 bytes)
 		limBuf := make([]byte, 4)
 
 		if _, err := io.ReadFull(reader, limBuf); err != nil {
@@ -89,6 +99,10 @@ func handleConnection(conn net.Conn, kvStore *store.Store) {
 		message = strings.TrimSpace(message)
 		fmt.Println("Received message:", message)
 
+		// Set write deadline
+		conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+
+		// Process the message using the parser
 		response, err := parser.ParseCmd(kvStore, message)
 
 		// Echo back the received message
