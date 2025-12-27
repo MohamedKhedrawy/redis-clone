@@ -13,6 +13,7 @@ import (
 	"github.com/MohamedKhedrawy/redis-clone/api/store"
 	"context"
 	"time"
+	"errors"
 )
 
 // var mut sync.RWMutex
@@ -103,7 +104,9 @@ func handleConnection(conn net.Conn, kvStore *store.Store) {
 		conn.SetWriteDeadline(time.Now().Add(writeTimeout))
 
 		// Process the message using the parser
-		response, err := parser.ParseCmd(kvStore, message)
+		response, err := executeWithTimeout(10*time.Second, func() (string, error) {
+			return parser.ParseCmd(kvStore, message)
+		})
 
 		// Echo back the received message
 		// response := "Echo: " + message
@@ -128,5 +131,27 @@ func handleConnection(conn net.Conn, kvStore *store.Store) {
 			return
 		}
 	}
+}
+
+func executeWithTimeout(
+    timeout time.Duration,
+    fn func() (string, error),
+) (string, error) {
+
+    done := make(chan struct{})
+    var res string
+    var err error
+
+    go func() {
+        defer close(done)
+        res, err = fn()
+    }()
+
+    select {
+    case <-done:
+        return res, err
+    case <-time.After(timeout):
+        return "", errors.New("command timeout")
+    }
 }
 
