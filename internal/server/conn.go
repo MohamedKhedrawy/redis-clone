@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"bufio"
@@ -7,45 +7,14 @@ import (
 	"io"
 	"net"
 	"strings"
-	// "sync"
-	// "github.com/MohamedKhedrawy/redis-clone/api/client"
-	"github.com/MohamedKhedrawy/redis-clone/api/parser"
-	"github.com/MohamedKhedrawy/redis-clone/api/store"
-	"context"
 	"time"
-	"errors"
+
+	parser "github.com/MohamedKhedrawy/redis-clone/internal/command"
+	"github.com/MohamedKhedrawy/redis-clone/internal/store"
+	"github.com/MohamedKhedrawy/redis-clone/internal/wal"
 )
 
-// var mut sync.RWMutex
-const MaxMessageSize = 1048576 // 1 MB
-const (
-    readTimeout  = 2 * time.Minute
-    writeTimeout = 10 * time.Second
-)
-
-func main() {
-	kvStore := store.NewStore()
-	kvStore.StartCollector(context.Background())
-	ln, err := net.Listen("tcp", ":8080")
-	if err != nil {
-		fmt.Println("Error starting TCP listener:", err)
-		return
-	}
-	defer ln.Close()
-	fmt.Println("TCP listener started on :8080")
-
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			fmt.Println("Error accepting connection:", err)
-			continue
-		}
-		go handleConnection(conn, kvStore)
-	}
-
-}
-
-func handleConnection(conn net.Conn, kvStore *store.Store) {
+func handleConnection(conn net.Conn, KvStore *store.Store, w wal.WAL) {
 	defer conn.Close()
 
 	defer func() {
@@ -62,7 +31,7 @@ func handleConnection(conn net.Conn, kvStore *store.Store) {
 
 		// Set read deadline
 		conn.SetReadDeadline(time.Now().Add(readTimeout))
-		
+
 		// Read the length prefix (4 bytes)
 		limBuf := make([]byte, 4)
 
@@ -105,7 +74,7 @@ func handleConnection(conn net.Conn, kvStore *store.Store) {
 
 		// Process the message using the parser
 		response, err := executeWithTimeout(10*time.Second, func() (string, error) {
-			return parser.ParseCmd(kvStore, message)
+			return parser.ParseCmd(KvStore, w, message, false)
 		})
 
 		// Echo back the received message
@@ -116,7 +85,7 @@ func handleConnection(conn net.Conn, kvStore *store.Store) {
 		} else {
 			fmt.Println(response)
 		}
-		
+
 		respLen := uint32(len(response))
 		respLenBuf := make([]byte, 4)
 		binary.BigEndian.PutUint32(respLenBuf, respLen)
@@ -125,33 +94,10 @@ func handleConnection(conn net.Conn, kvStore *store.Store) {
 			fmt.Println("Error writing response length:", err)
 			return
 		}
-		
+
 		if _, err := conn.Write([]byte(response)); err != nil {
 			fmt.Println("Error writing response body:", err)
 			return
 		}
 	}
 }
-
-func executeWithTimeout(
-    timeout time.Duration,
-    fn func() (string, error),
-) (string, error) {
-
-    done := make(chan struct{})
-    var res string
-    var err error
-
-    go func() {
-        defer close(done)
-        res, err = fn()
-    }()
-
-    select {
-    case <-done:
-        return res, err
-    case <-time.After(timeout):
-        return "", errors.New("command timeout")
-    }
-}
-

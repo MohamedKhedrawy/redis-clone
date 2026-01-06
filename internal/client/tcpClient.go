@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
     "encoding/binary"
@@ -79,7 +79,7 @@ func SendMsg(message string) {
 }
 
 
-func main() {
+func RunClient() {
     for {
         scanner := bufio.NewScanner(os.Stdin)
         fmt.Print("Enter message to send: ")

@@ -1,10 +1,11 @@
-package parser
+package command
 
 import (
 	"errors"
 	"strings"
 
-	"github.com/MohamedKhedrawy/redis-clone/api/store"
+	"github.com/MohamedKhedrawy/redis-clone/internal/store"
+	"github.com/MohamedKhedrawy/redis-clone/internal/wal"
 )
 
 type Command struct {
@@ -12,7 +13,7 @@ type Command struct {
 	Args []string
 }
 
-func ParseCmd(s *store.Store, message string) (string, error) {
+func ParseCmd(s *store.Store, w wal.WAL, message string, isReplay bool) (string, error) {
 	var cmd Command
 	parts := strings.Fields(message)
 	if len(parts) == 0 {
@@ -24,21 +25,22 @@ func ParseCmd(s *store.Store, message string) (string, error) {
 	} else {
 		cmd.Args = []string{}
 	}
-	value, err := handleCmd(cmd, s)
-	if err != nil {
-		return "", err
-	} else {
-		return value, nil
-	}
-}
 
-func handleCmd(cmd Command, s *store.Store) (string, error) {
 	switch cmd.Name {
 	case "SET":
 		if len(cmd.Args) >= 2 {
-			err := handleSet(s, cmd.Args)
+
+			if !isReplay {
+				// panic("test")
+				if err := w.Append([]byte(message)); true {
+					return "Error writing to WAL", err
+				}
+			}
+
+
+			err := s.Set(cmd.Args, isReplay)
 			if err != nil {
-				return "", err
+				return "Error setting key", err
 			} else {
 				return "ok", nil
 			}
@@ -47,21 +49,32 @@ func handleCmd(cmd Command, s *store.Store) (string, error) {
 		}
 	case "GET":
 		if len(cmd.Args) == 1 {
-			value, err := handleGet(s, cmd.Args)
+			value, exists, err := s.Get(cmd.Args[0])
 			if err != nil {
 				return "", err
 			} else {
-				return value, nil
+				if !exists {
+					return "", errors.New("key does not exist " + cmd.Args[0])
+				}
+				return value.GetValue(), nil
 			}
 		} else {
 			return "", errors.New("GET command requires exactly 1 argument")
 		}
 	case "DEL":
 		if len(cmd.Args) > 0 {
-			err := handleDel(s, cmd.Args)
+
+			if !isReplay {
+				if err := w.Append([]byte(message)); err != nil {
+					return "Error writing to WAL", err
+				}
+			}
+
+			err := s.Delete(cmd.Args[0])
 			if err != nil {
-				return "", err
+				return "Error deleting key", err
 			} else {
+
 				return "ok", nil
 			}
 		} else {
@@ -69,7 +82,7 @@ func handleCmd(cmd Command, s *store.Store) (string, error) {
 		}
 	case "EXISTS":
 		if len(cmd.Args) == 1 {
-			isExists, err := handleExists(s, cmd.Args)
+			isExists, err := s.Exists(cmd.Args[0])
 			if err != nil {
 				return "", err
 			} else {
@@ -87,43 +100,4 @@ func handleCmd(cmd Command, s *store.Store) (string, error) {
 		return "", errors.New("Unknown command: " + cmd.Name)
 	}
 
-}
-
-func handleSet(s *store.Store, args []string) error {
-	err := s.Set(args)
-	if err != nil {
-		return err
-	} else {
-		return nil
-	}
-}
-
-func handleGet(s *store.Store, args []string) (string, error) {
-
-	value, exists, err := s.Get(args[0])
-	if err != nil {
-		return "", err
-	}
-	if !exists {
-		return "", errors.New("key does not exist " + args[0])
-	}
-	return value.GetValue(), nil
-}
-
-func handleDel(s *store.Store, args []string) error {
-	err := s.Delete(args[0])
-	if err != nil {
-		return err
-	} else {
-		return nil
-	}
-}
-
-func handleExists(s *store.Store, args []string) (bool, error) {
-	isExists, err := s.Exists(args[0])
-	if err != nil {
-		return false, err
-	} else {
-		return isExists, nil
-	}
 }

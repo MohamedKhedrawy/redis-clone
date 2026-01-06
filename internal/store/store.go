@@ -43,7 +43,7 @@ func (s *Store) Get(key string) (Value, bool, error) {
 	return value, exists, nil
 }
 
-func (s *Store) Set(args []string) error {
+func (s *Store) Set(args []string, isReplay bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := args[0]
@@ -53,6 +53,7 @@ func (s *Store) Set(args []string) error {
 		if err != nil {
 			return err
 		}
+		
 		s.data[key] = Value{dataValue: value, expiresAt: time.Now().Add(expireSeconds)}
 		return nil
 	}
@@ -100,14 +101,14 @@ func (s *Store) Exists(key string) (bool, error) {
 }
 
 func goSafe(name string, fn func()) {
-    go func() {
-        defer func() {
-            if r := recover(); r != nil {
-                log.Printf("panic in %s: %v\n%s", name, r, debug.Stack())
-            }
-        }()
-        fn()
-    }()
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("panic in %s: %v\n%s", name, r, debug.Stack())
+			}
+		}()
+		fn()
+	}()
 }
 
 func (s *Store) StartCollector(ctx context.Context) {
