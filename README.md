@@ -125,6 +125,6 @@ These are intentional trade-offs to keep the learning focused.
 ## Notes
 
 Design decisions, mistakes, and lessons learned are documented in  
-`docs/journal.md`.
+`docs/journal.md` (SOON). 
 
 This project is as much about **how** the system was built as **what** was built.
